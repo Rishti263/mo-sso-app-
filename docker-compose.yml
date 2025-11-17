@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ssoapp_postgres
+    environment:
+      POSTGRES_DB: multitenant_saas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: PhoenixQ8q
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ssoapp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssoapp_java
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/multitenant_saas
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: Phoenix@84
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SERVER_PORT: 8080
+      APP_SUPERADMIN_DOMAIN: superadmin.localhost
+      JWT_SECRET: mySecretKeyThatIsAtLeast256BitsLongForHS256Algorithm1234567890123456789
+      JWT_EXPIRATION: 86400000
+    ports:
+      - "8080:8080"
+    networks:
+      - ssoapp-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: ssoapp_nginx
+    ports:
+      - "80:80"
+      # - "443:443"  # Comment this out for now
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    networks:
+      - ssoapp-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  ssoapp-network:
+    driver: bridge

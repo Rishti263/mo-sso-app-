@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — SSO Portal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 450px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo { text-align: center; margin-bottom: 30px; }
+        .logo h1 { color: #222; font-size: 28px; margin-bottom: 6px; }
+        .logo p { color: #6c757d; font-size: 14px; }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 14px;
+        }
+        .form-group input {
+            width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; transition: all 0.3s;
+        }
+        .form-group input:focus {
+            outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn-primary {
+            width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4); }
+
+        .divider { text-align: center; margin: 26px 0; position: relative; }
+        .divider::before {
+            content: ''; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: #e0e0e0;
+        }
+        .divider span { background: #fff; padding: 0 15px; color: #6c757d; font-size: 14px; position: relative; }
+
+        .sso-buttons { display: flex; flex-direction: column; gap: 12px; }
+        .sso-btn {
+            padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; background: #fff; color: #333;
+            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; text-decoration: none;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .sso-btn:hover { border-color: #667eea; background: #f8f9ff; transform: translateY(-2px); }
+        .sso-btn.jwt { border-color: #667eea; color: #3742fa; }
+        .sso-btn.oauth { border-color: #2e86de; color: #1e3799; }
+        .sso-btn.saml  { border-color: #10ac84; color: #0e6b50; }
+
+
+        .register-link { text-align: center; margin-top: 22px; color: #6c757d; font-size: 14px; }
+        .register-link a { color: #667eea; text-decoration: none; font-weight: 600; }
+        .register-link a:hover { text-decoration: underline; }
+
+        .alert {
+            padding: 12px 15px; border-radius: 8px; margin-bottom: 18px; font-size: 14px; line-height: 1.4;
+        }
+        .alert-danger { background: #fee; color: #a22020; border-left: 4px solid #a22020; }
+        .alert-success { background: #efe; color: #207a20; border-left: 4px solid #207a20; }
+    </style>
+</head>
+<body>
+<div class="login-container">
+    <div class="logo">
+        <h1>SSO Portal</h1>
+        <p>Secure authentication gateway</p>
+    </div>
+
+    <!-- Error messaging mapped from controller query parameters -->
+    <div th:if="${param.error}" class="alert alert-danger" th:switch="${param.error}">
+        <span th:case="'jwt_not_configured'">JWT SSO is not configured.</span>
+        <span th:case="'jwt_disabled'">JWT SSO is disabled.</span>
+        <span th:case="'missing_token'">No token was provided.</span>
+        <span th:case="'jwt_expired'">Your session token has expired. Re-initiate sign-in.</span>
+        <span th:case="'jwt_signature_invalid'">Token signature verification failed.</span>
+        <span th:case="'jwt_validation_failed'">Token validation failed.</span>
+        <span th:case="'missing_subject'">Identity is missing from the token.</span>
+        <span th:case="'invalid_token'">The token is invalid or malformed.</span>
+        <span th:case="*">Authentication failed. Please retry.</span>
+    </div>
+
+    <!-- Success messaging via query parameter -->
+    <div th:if="${param.success}" class="alert alert-success">
+        <span th:text="${param.success}">Operation completed successfully.</span>
+    </div>
+
+    <!-- Native login (if applicable to your stack) -->
+    <form action="/api/auth/login" method="post">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" placeholder="Enter your username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" placeholder="Enter your password" required>
+        </div>
+
+        <button type="submit" class="btn-primary">Login</button>
+    </form>
+
+    <div class="divider"><span>Or continue with SSO</span></div>
+
+    <!-- Only the JWT entry point is exposed, per controller -->
+    <div class="sso-buttons">
+        <a href="/sso/jwt/login" class="sso-btn jwt">Continue with JWT SSO</a>
+        <a href="/sso/oauth/login" class="sso-btn oauth">Continue with OAuth (OIDC)</a>
+        <a href="/sso/saml/login" class="sso-btn saml">Continue with SAML</a>
+    </div>
+
+    <div class="register-link">
+        Don’t have an account? <a href="/register">Register here</a>
+    </div>
+</div>
+</body>
+</html>

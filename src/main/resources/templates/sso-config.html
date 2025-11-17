@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSO Configuration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+        }
+
+        .btn-back {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-back:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .container {
+            padding: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+        }
+
+        .config-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 20px;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .card-header.jwt {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+        }
+
+        .card-header.saml {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a3b7 100%);
+        }
+
+        .card-header.oauth {
+            background: linear-gradient(135deg, #95e1d3 0%, #5fb3a4 100%);
+        }
+
+        .card-body {
+            padding: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        .btn-save {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-save:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .alert {
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+    </style>
+</head>
+<body>
+<div class="navbar">
+    <h1>⚙️ SSO Configuration</h1>
+    <a href="/admin/dashboard" class="btn-back">← Back to Dashboard</a>
+</div>
+
+<div class="container">
+    <div class="config-grid">
+        <!-- JWT Configuration -->
+        <div class="config-card">
+            <div class="card-header jwt">
+                🔑 JWT SSO Configuration
+            </div>
+            <div class="card-body">
+                <div id="jwt-alert"></div>
+                <form id="jwtForm">
+                    <div class="form-group">
+                        <label>IDP URL</label>
+                        <input type="url" id="jwt-idp-url" placeholder="https://your-idp.com/jwt/auth" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Client ID</label>
+                        <input type="text" id="jwt-client-id" placeholder="your-client-id" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Client Secret</label>
+                        <input type="password" id="jwt-client-secret" placeholder="your-client-secret" required>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="jwt-enabled">
+                        <label for="jwt-enabled" style="margin: 0;">Enable JWT SSO</label>
+                    </div>
+                    <button type="submit" class="btn-save">Save JWT Configuration</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- SAML Configuration -->
+        <div class="config-card">
+            <div class="card-header saml">
+                🛡️ SAML SSO Configuration
+            </div>
+            <div class="card-body">
+                <div id="saml-alert"></div>
+                <form id="samlForm">
+                    <div class="form-group">
+                        <label>IDP Entity ID</label>
+                        <input type="text" id="saml-entity-id" placeholder="https://idp.example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>SSO URL</label>
+                        <input type="url" id="saml-sso-url" placeholder="https://idp.example.com/saml/sso" required>
+                    </div>
+                    <div class="form-group">
+                        <label>X.509 Certificate</label>
+                        <textarea id="saml-certificate" placeholder="-----BEGIN CERTIFICATE-----
+MIICXAIBAAKBgQC...
+-----END CERTIFICATE-----" required></textarea>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="saml-enabled">
+                        <label for="saml-enabled" style="margin: 0;">Enable SAML SSO</label>
+                    </div>
+                    <button type="submit" class="btn-save">Save SAML Configuration</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- OAuth Configuration -->
+        <div class="config-card">
+            <div class="card-header oauth">
+                🌐 OAuth 2.0 Configuration
+            </div>
+            <div class="card-body">
+                <div id="oauth-alert"></div>
+                <form id="oauthForm">
+                    <div class="form-group">
+                        <label>Authorization URL</label>
+                        <input type="url" id="oauth-idp-url" placeholder="https://idp.example.com/oauth/authorize" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Token URL</label>
+                        <input type="url" id="oauth-sso-url" placeholder="https://idp.example.com/oauth/token" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Client ID</label>
+                        <input type="text" id="oauth-client-id" placeholder="your-client-id" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Client Secret</label>
+                        <input type="password" id="oauth-client-secret" placeholder="your-client-secret" required>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="oauth-enabled">
+                        <label for="oauth-enabled" style="margin: 0;">Enable OAuth SSO</label>
+                    </div>
+                    <button type="submit" class="btn-save">Save OAuth Configuration</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function showAlert(type, message, elementId) {
+        const alertDiv = document.getElementById(elementId);
+        alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        setTimeout(() => {
+            alertDiv.innerHTML = '';
+        }, 3000);
+    }
+
+    document.getElementById('jwtForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const config = {
+            ssoType: 'JWT',
+            idpUrl: document.getElementById('jwt-idp-url').value,
+            clientId: document.getElementById('jwt-client-id').value,
+            clientSecret: document.getElementById('jwt-client-secret').value,
+            isEnabled: document.getElementById('jwt-enabled').checked
+        };
+
+        try {
+            const response = await fetch('/sso/jwt/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.text();
+
+            if (result === 'success') {
+                showAlert('success', 'JWT configuration saved successfully!', 'jwt-alert');
+            } else {
+                showAlert('error', result, 'jwt-alert');
+            }
+        } catch (error) {
+            showAlert('error', 'Error saving configuration: ' + error, 'jwt-alert');
+        }
+    });
+
+    document.getElementById('samlForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const config = {
+            ssoType: 'SAML',
+            entityId: document.getElementById('saml-entity-id').value,
+            ssoUrl: document.getElementById('saml-sso-url').value,
+            certificate: document.getElementById('saml-certificate').value,
+            isEnabled: document.getElementById('saml-enabled').checked
+        };
+
+        try {
+            const response = await fetch('/sso/saml/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.text();
+
+            if (result === 'success') {
+                showAlert('success', 'SAML configuration saved successfully!', 'saml-alert');
+            } else {
+                showAlert('error', result, 'saml-alert');
+            }
+        } catch (error) {
+            showAlert('error', 'Error saving configuration: ' + error, 'saml-alert');
+        }
+    });
+
+    document.getElementById('oauthForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const config = {
+            ssoType: 'OAUTH',
+            idpUrl: document.getElementById('oauth-idp-url').value,
+            ssoUrl: document.getElementById('oauth-sso-url').value,
+            clientId: document.getElementById('oauth-client-id').value,
+            clientSecret: document.getElementById('oauth-client-secret').value,
+            isEnabled: document.getElementById('oauth-enabled').checked
+        };
+
+        try {
+            const response = await fetch('/sso/oauth/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.text();
+
+            if (result === 'success') {
+                showAlert('success', 'OAuth configuration saved successfully!', 'oauth-alert');
+            } else {
+                showAlert('error', result, 'oauth-alert');
+            }
+        } catch (error) {
+            showAlert('error', 'Error saving configuration: ' + error, 'oauth-alert');
+        }
+    });
+</script>
+</body>
+</html>

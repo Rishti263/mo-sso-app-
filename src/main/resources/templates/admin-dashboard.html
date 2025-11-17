@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Admin Dashboard</title>
+
+    <!-- CSRF -->
+    <meta name="_csrf" th:content="${_csrf.token}" />
+    <meta name="_csrf_header" th:content="${_csrf.headerName}" />
+
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f5f7fa; }
+        .navbar { background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; padding:18px 32px; display:flex; justify-content:space-between; align-items:center; }
+        .navbar h1 { font-size:20px; font-weight:700; }
+        .btn-logout { padding:10px 16px; border:2px solid #fff; color:#fff; border-radius:8px; text-decoration:none; font-weight:700; }
+        .btn-logout:hover { background:#fff; color:#5a67d8; }
+        .container { padding:32px; max-width:1280px; margin:0 auto; }
+        .actions { display:flex; gap:12px; margin-bottom:20px; }
+        .btn { padding:10px 16px; border:none; border-radius:8px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+        .btn-create { background:#5a67d8; color:#fff; }
+        .btn-create:hover { background:#4c51bf; }
+        .btn-sso { background:#16a085; color:#fff; }
+        .btn-sso:hover { background:#13856e; }
+        .wrap { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); overflow:hidden; }
+        .hdr { padding:16px 20px; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-weight:700; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:14px 16px; border-bottom:1px solid #eef0f3; text-align:left; }
+        th { background:#f8f9fa; color:#2c3e50; font-weight:700; font-size:13px; }
+        tr:hover { background:#fafcff; }
+        .btn-sm { padding:6px 12px; border:none; border-radius:6px; font-weight:700; cursor:pointer; }
+        .btn-edit { background:#f39c12; color:#fff; }
+        .btn-edit:hover { background:#d68910; }
+        .btn-delete { background:#e74c3c; color:#fff; }
+        .btn-delete:hover { background:#c0392b; }
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
+        .modal.active { display:flex; }
+        .modal-content { background:#fff; border-radius:12px; width:92%; max-width:520px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.2); }
+        .form-group { margin-bottom:12px; }
+        .form-group label { font-size:13px; font-weight:700; margin-bottom:6px; display:block; color:#2c3e50; }
+        .form-group input, .form-group select { width:100%; padding:10px; border:2px solid #e6e8eb; border-radius:8px; font-size:14px; }
+        .form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+        .btn-cancel { background:#95a5a6; color:#fff; }
+        .btn-save { background:#5a67d8; color:#fff; }
+    </style>
+</head>
+<body>
+<div class="navbar">
+    <h1>Admin Dashboard</h1>
+    <div>
+        <span th:text="'Welcome, ' + ${currentUser.username} + ' (Admin)'"></span>
+        &nbsp;&nbsp;
+        <a href="/logout" class="btn-logout">Logout</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="actions">
+        <button class="btn btn-create" id="btn-open-create">Create End User</button>
+        <a href="/admin/sso-config" class="btn btn-sso">Configure SSO Settings</a>
+    </div>
+
+    <div class="wrap">
+        <div class="hdr">End Users</div>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Created At</th><th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="user : ${users}">
+                <td th:text="${user.id}">1</td>
+                <td th:text="${user.username}">jdoe</td>
+                <td th:text="${user.email}">jdoe@acme.com</td>
+                <td th:text="${user.role}">ENDUSER</td>
+                <td th:text="${#temporals.format(user.createdAt, 'yyyy-MM-dd HH:mm')}">2025-01-01</td>
+                <td>
+                    <button class="btn-sm btn-edit"
+                            th:attr="data-id=${user.id},data-username=${user.username},data-email=${user.email},data-role=${user.role}"
+                            onclick="openEdit(this)">Edit</button>
+                    <button class="btn-sm btn-delete"
+                            th:attr="data-id=${user.id},data-username=${user.username}"
+                            onclick="handleDelete(this)">Delete</button>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create End User Modal -->
+<div id="createModal" class="modal">
+    <div class="modal-content">
+        <h3>Create End User</h3>
+        <form id="createForm">
+            <div class="form-group">
+                <label>Username</label>
+                <input id="c-username" type="text" required />
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input id="c-email" type="email" required />
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input id="c-password" type="password" required />
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select id="c-role" required>
+                    <!-- AdminController will force ENDUSER; keep the UI aligned -->
+                    <option value="ENDUSER" selected>ENDUSER</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-cancel" onclick="closeCreate()">Cancel</button>
+                <button type="submit" class="btn btn-save">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit End User Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h3>Edit End User</h3>
+        <form id="editForm">
+            <input type="hidden" id="e-id" />
+            <div class="form-group">
+                <label>Username</label>
+                <input id="e-username" type="text" required />
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input id="e-email" type="email" required />
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select id="e-role" required>
+                    <option value="ENDUSER" selected>ENDUSER</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>New Password (blank to keep)</label>
+                <input id="e-password" type="password" />
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-cancel" onclick="closeEdit()">Cancel</button>
+                <button type="submit" class="btn btn-save">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    const CSRF_TOKEN = /*[[${_csrf.token}]]*/ '';
+    const CSRF_HEADER = /*[[${_csrf.headerName}]]*/ 'X-CSRF-TOKEN';
+    const setCsrf = (headers = {}) => { headers[CSRF_HEADER] = CSRF_TOKEN; return headers; };
+
+    document.getElementById('btn-open-create').addEventListener('click', () => {
+      document.getElementById('createModal').classList.add('active');
+    });
+    const closeCreate = () => { document.getElementById('createForm').reset(); document.getElementById('createModal').classList.remove('active'); };
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        username: document.getElementById('c-username').value,
+        email: document.getElementById('c-email').value,
+        password: document.getElementById('c-password').value,
+        role: document.getElementById('c-role').value
+      };
+      const res = await fetch('/admin/user/create', {
+        method: 'POST',
+        headers: setCsrf({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json().catch(()=>({}));
+      if (res.ok && json.status === 'success') {
+        window.location.reload();
+      } else {
+        alert(json.message || 'Create failed');
+      }
+    });
+
+    const openEdit = (btn) => {
+      document.getElementById('e-id').value = btn.dataset.id;
+      document.getElementById('e-username').value = btn.dataset.username;
+      document.getElementById('e-email').value = btn.dataset.email;
+      document.getElementById('e-role').value = 'ENDUSER';
+      document.getElementById('e-password').value = '';
+      document.getElementById('editModal').classList.add('active');
+    };
+    const closeEdit = () => { document.getElementById('editForm').reset(); document.getElementById('editModal').classList.remove('active'); };
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('e-id').value;
+      const payload = {
+        username: document.getElementById('e-username').value,
+        email: document.getElementById('e-email').value,
+        role: 'ENDUSER',
+        password: document.getElementById('e-password').value
+      };
+      const res = await fetch(`/admin/user/update/${id}`, {
+        method: 'POST',
+        headers: setCsrf({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json().catch(()=>({}));
+      if (res.ok && json.status === 'success') {
+        window.location.reload();
+      } else {
+        alert(json.message || 'Update failed');
+      }
+    });
+
+    const handleDelete = async (btn) => {
+      const id = btn.dataset.id;
+      const username = btn.dataset.username;
+      if (!confirm(`Delete user ${username}?`)) return;
+      const res = await fetch(`/admin/user/delete/${id}`, {
+        method: 'POST',
+        headers: setCsrf()
+      });
+      const json = await res.json().catch(()=>({}));
+      if (res.ok && json.status === 'success') {
+        window.location.reload();
+      } else {
+        alert(json.message || 'Delete failed');
+      }
+    };
+
+    document.getElementById('createModal').addEventListener('click', (e)=>{ if (e.target.id==='createModal') closeCreate(); });
+    document.getElementById('editModal').addEventListener('click', (e)=>{ if (e.target.id==='editModal') closeEdit(); });
+</script>
+</body>
+</html>

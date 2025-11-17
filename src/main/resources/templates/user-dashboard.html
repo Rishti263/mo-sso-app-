@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>User Dashboard</title>
+
+    <!-- CSRF -->
+    <meta name="_csrf" th:content="${_csrf.token}" />
+    <meta name="_csrf_header" th:content="${_csrf.headerName}" />
+
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(135deg,#667eea,#764ba2); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+        .wrap { background:#fff; border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); padding:36px; width:100%; max-width:680px; }
+        h1 { font-size:28px; color:#2c3e50; margin-bottom:10px; }
+        .sub { color:#6c757d; margin-bottom:20px; }
+        .panel { background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; border-radius:12px; padding:16px 20px; margin:22px 0; }
+        .panel p { margin:6px 0; }
+        .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:22px; }
+        .card { background:#f8f9fa; border-radius:12px; padding:16px; }
+        .row { display:flex; gap:12px; }
+        .btn { display:inline-block; padding:10px 16px; border-radius:8px; border:none; cursor:pointer; font-weight:700; }
+        .btn-logout { background:#e74c3c; color:#fff; }
+        .btn-logout:hover { background:#c0392b; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>User Workspace</h1>
+    <div class="sub">Authenticated session established. You can manage your profile from here.</div>
+
+    <div class="panel">
+        <p><strong>Username:</strong> <span th:text="${currentUser.username}">jdoe</span></p>
+        <p><strong>Email:</strong> <span th:text="${currentUser.email}">jdoe@acme.com</span></p>
+        <p><strong>Role:</strong> <span th:text="${currentUser.role}">ENDUSER</span></p>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Profile</h3>
+            <div style="margin-top:10px">
+                <form id="profileForm">
+                    <div class="row" style="margin-bottom:10px">
+                        <div style="flex:1">
+                            <label style="font-weight:700; font-size:12px">Email</label>
+                            <input id="p-email" type="email" th:value="${currentUser.email}"
+                                   style="width:100%; padding:10px; border:2px solid #e6e8eb; border-radius:8px"/>
+                        </div>
+                    </div>
+                    <button class="btn" style="background:#5a67d8; color:#fff">Update Profile</button>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Password</h3>
+            <div style="margin-top:10px">
+                <form id="passwordForm">
+                    <div class="row" style="margin-bottom:10px">
+                        <div style="flex:1">
+                            <label style="font-weight:700; font-size:12px">Current Password</label>
+                            <input id="pw-current" type="password" style="width:100%; padding:10px; border:2px solid #e6e8eb; border-radius:8px"/>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-bottom:10px">
+                        <div style="flex:1">
+                            <label style="font-weight:700; font-size:12px">New Password</label>
+                            <input id="pw-new" type="password" style="width:100%; padding:10px; border:2px solid #e6e8eb; border-radius:8px"/>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-bottom:10px">
+                        <div style="flex:1">
+                            <label style="font-weight:700; font-size:12px">Confirm New Password</label>
+                            <input id="pw-confirm" type="password" style="width:100%; padding:10px; border:2px solid #e6e8eb; border-radius:8px"/>
+                        </div>
+                    </div>
+                    <button class="btn" style="background:#34495e; color:#fff">Change Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top:22px">
+        <a href="/logout" class="btn btn-logout">Logout</a>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    const CSRF_TOKEN = /*[[${_csrf.token}]]*/ '';
+    const CSRF_HEADER = /*[[${_csrf.headerName}]]*/ 'X-CSRF-TOKEN';
+    const setCsrf = (headers = {}) => { headers[CSRF_HEADER] = CSRF_TOKEN; return headers; };
+
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = { email: document.getElementById('p-email').value };
+      const res = await fetch('/user/profile/update', {
+        method: 'POST', // controller maps POST to update
+        headers: setCsrf({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json().catch(()=>({}));
+      if (res.ok && json.status === 'success') {
+        alert('Profile updated');
+        window.location.reload();
+      } else {
+        alert(json.message || 'Update failed');
+      }
+    });
+
+    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        currentPassword: document.getElementById('pw-current').value,
+        newPassword: document.getElementById('pw-new').value,
+        confirmPassword: document.getElementById('pw-confirm').value
+      };
+      const res = await fetch('/user/password/change', {
+        method: 'POST',
+        headers: setCsrf({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json().catch(()=>({}));
+      if (res.ok && json.status === 'success') {
+        alert('Password changed');
+        (document.getElementById('pw-current').value =
+         document.getElementById('pw-new').value =
+         document.getElementById('pw-confirm').value = '');
+      } else {
+        alert(json.message || 'Password change failed');
+      }
+    });
+</script>
+</body>
+</html>
