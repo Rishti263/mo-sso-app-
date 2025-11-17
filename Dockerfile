@@ -1,30 +1,31 @@
-# Build stage
-FROM maven:3.9-eclipse-temurin-17 AS build
+# ====== BUILD STAGE ======
+FROM maven:3.9-eclipse-temurin-21 AS build
+
 WORKDIR /app
 
-# Copy Maven wrapper and pom.xml
-COPY mvnw .
-COPY .mvn .mvn
+# Copy pom first and prefetch dependencies (cache optimization)
 COPY pom.xml .
+RUN mvn -B -q -DskipTests dependency:go-offline
 
-# Download dependencies (this layer will be cached)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
+# Copy sources and build
 COPY src ./src
+RUN mvn -B clean package -DskipTests
 
-# Build the application
-RUN ./mvnw clean package -DskipTests
+# ====== RUNTIME STAGE ======
+FROM eclipse-temurin:21-jre
 
-# Runtime stage
-FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Copy the jar from build stage
+# Copy the fat JAR from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose port
+# Render will inject PORT at runtime (defaults to 10000 if not overridden)
+# We'll default to 8080 locally
+ENV JAVA_OPTS=""
+ENV PORT=8080
+
+# Expose 8080 for local runs; Render doesn't require EXPOSE but it's fine
 EXPOSE 8080
 
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Bind Spring Boot to the PORT env var
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -jar app.jar"]
