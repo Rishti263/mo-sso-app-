@@ -38,21 +38,48 @@ import java.util.*;
 @Slf4j
 public class OAuthSSOController {
 
-    private static final String CALLBACK_URL = "http://localhost:8080/sso/oauth/callback";
     private final RestTemplate rest = new RestTemplate();
-
     private final SSOConfigService ssoConfigService;
     private final UserService userService;
 
+    /**
+     * Dynamically build callback URL based on current request
+     * Works for both localhost and production (trustifyr.app)
+     */
+    private String buildCallbackUrl(HttpServletRequest request) {
+        // Check for X-Forwarded-Proto header (set by reverse proxies like Nginx, Render)
+        String scheme = request.getHeader("X-Forwarded-Proto");
+        if (scheme == null || scheme.isEmpty()) {
+            scheme = request.getScheme(); // fallback to http/https from request
+        }
+
+        // Get the host (includes port if non-standard)
+        String host = request.getHeader("Host");
+        if (host == null || host.isEmpty()) {
+            host = request.getServerName();
+            int port = request.getServerPort();
+            // Add port if it's not default for the scheme
+            if ((scheme.equals("http") && port != 80) || (scheme.equals("https") && port != 443)) {
+                host = host + ":" + port;
+            }
+        }
+
+        String callbackUrl = scheme + "://" + host + "/sso/oauth/callback";
+        log.info("Dynamic OAuth callback URL: {}", callbackUrl);
+        return callbackUrl;
+    }
+
     // ===== Login kick-off =====
     @GetMapping("/login")
-    public String initiateOAuthLogin(HttpSession session) {
+    public String initiateOAuthLogin(HttpSession session, HttpServletRequest request) {
         final String rid = rid();
+        
         Optional<SSOConfig> cfgOpt = ssoConfigService.getConfigByType("OAUTH");
         if (!cfgOpt.isPresent() || !Boolean.TRUE.equals(cfgOpt.get().getIsEnabled())) {
             log.warn("[{}] OAuth not configured/enabled", rid);
             return "redirect:/login?error=oauth_not_configured";
         }
+        
         SSOConfig cfg = cfgOpt.get();
         if (!hasText(cfg.getIdpUrl()) || !hasText(cfg.getClientId()) || !hasText(cfg.getSsoUrl())) {
             log.warn("[{}] OAuth config incomplete", rid);
@@ -62,16 +89,20 @@ public class OAuthSSOController {
         String state = UUID.randomUUID().toString();
         session.setAttribute("oauth_state", state);
 
+        // Build callback URL dynamically
+        String callbackUrl = buildCallbackUrl(request);
+
         try {
             String authUrl =
                     cfg.getIdpUrl()
                             + "?response_type=code"
                             + "&client_id=" + URLEncoder.encode(cfg.getClientId(), StandardCharsets.UTF_8.name())
-                            + "&redirect_uri=" + URLEncoder.encode(CALLBACK_URL, StandardCharsets.UTF_8.name())
+                            + "&redirect_uri=" + URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8.name())
                             + "&scope=" + URLEncoder.encode("openid profile email", StandardCharsets.UTF_8.name())
                             + "&state=" + state;
 
             log.info("[{}] Redirecting to OAuth Authorization: {}", rid, authUrl);
+            log.info("[{}] Using callback URL: {}", rid, callbackUrl);
             return "redirect:" + authUrl;
         } catch (Exception e) {
             log.error("[{}] OAuth auth URL build failed", rid, e);
@@ -127,8 +158,12 @@ public class OAuthSSOController {
             }
             SSOConfig cfg = cfgOpt.get();
 
+            // Build callback URL dynamically (must match what was sent in initiation)
+            String callbackUrl = buildCallbackUrl(req);
+            log.info("[{}] Using callback URL for token exchange: {}", rid, callbackUrl);
+
             // Exchange code -> tokens
-            Map<String, Object> tokenResponse = exchangeCodeForToken(code, cfg);
+            Map<String, Object> tokenResponse = exchangeCodeForToken(code, cfg, callbackUrl);
             if (tokenResponse == null) {
                 log.warn("[{}] Token exchange returned null", rid);
                 res.sendRedirect("/login?error=oauth_token_null");
@@ -238,13 +273,13 @@ public class OAuthSSOController {
 
     // ===== Token exchange =====
     @SuppressWarnings("unchecked")
-    private Map<String, Object> exchangeCodeForToken(String code, SSOConfig cfg) {
+    private Map<String, Object> exchangeCodeForToken(String code, SSOConfig cfg, String callbackUrl) {
         final String rid = rid();
         try {
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
             form.add("grant_type", "authorization_code");
             form.add("code", code);
-            form.add("redirect_uri", CALLBACK_URL);
+            form.add("redirect_uri", callbackUrl);  // Use dynamic callback URL
             form.add("client_id", cfg.getClientId());
             form.add("client_secret", cfg.getClientSecret());
 
@@ -254,7 +289,7 @@ public class OAuthSSOController {
             headers.setBasicAuth(cfg.getClientId(), cfg.getClientSecret());
 
             HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(form, headers);
-            log.info("[{}] Token POST → {}", rid, cfg.getSsoUrl());
+            log.info("[{}] Token POST → {} with callback: {}", rid, cfg.getSsoUrl(), callbackUrl);
 
             ResponseEntity<Map> resp = rest.exchange(cfg.getSsoUrl(), HttpMethod.POST, entity, Map.class);
             log.info("[{}] Token exchange status: {}", rid, resp.getStatusCode());
