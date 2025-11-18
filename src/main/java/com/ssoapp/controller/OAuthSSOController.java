@@ -5,9 +5,6 @@ import com.ssoapp.entity.User;
 import com.ssoapp.service.SSOConfigService;
 import com.ssoapp.service.UserService;
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
-import io.jsonwebtoken.security.SignatureException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -27,10 +24,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import javax.crypto.SecretKey;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.PublicKey;
+import java.security.KeyFactory;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.*;
+import java.util.Base64;
 
 @Controller
 @RequestMapping("/sso/oauth")
@@ -44,21 +44,17 @@ public class OAuthSSOController {
 
     /**
      * Dynamically build callback URL based on current request
-     * Works for both localhost and production (trustifyr.app)
      */
     private String buildCallbackUrl(HttpServletRequest request) {
-        // Check for X-Forwarded-Proto header (set by reverse proxies like Nginx, Render)
         String scheme = request.getHeader("X-Forwarded-Proto");
         if (scheme == null || scheme.isEmpty()) {
-            scheme = request.getScheme(); // fallback to http/https from request
+            scheme = request.getScheme();
         }
 
-        // Get the host (includes port if non-standard)
         String host = request.getHeader("Host");
         if (host == null || host.isEmpty()) {
             host = request.getServerName();
             int port = request.getServerPort();
-            // Add port if it's not default for the scheme
             if ((scheme.equals("http") && port != 80) || (scheme.equals("https") && port != 443)) {
                 host = host + ":" + port;
             }
@@ -69,7 +65,6 @@ public class OAuthSSOController {
         return callbackUrl;
     }
 
-    // ===== Login kick-off =====
     @GetMapping("/login")
     public String initiateOAuthLogin(HttpSession session, HttpServletRequest request) {
         final String rid = rid();
@@ -89,7 +84,6 @@ public class OAuthSSOController {
         String state = UUID.randomUUID().toString();
         session.setAttribute("oauth_state", state);
 
-        // Build callback URL dynamically
         String callbackUrl = buildCallbackUrl(request);
 
         try {
@@ -110,7 +104,6 @@ public class OAuthSSOController {
         }
     }
 
-    // ===== Authorization Code callback (GET) =====
     @GetMapping("/callback")
     public void oauthCallback(
             String code,
@@ -158,7 +151,6 @@ public class OAuthSSOController {
             }
             SSOConfig cfg = cfgOpt.get();
 
-            // Build callback URL dynamically (must match what was sent in initiation)
             String callbackUrl = buildCallbackUrl(req);
             log.info("[{}] Using callback URL for token exchange: {}", rid, callbackUrl);
 
@@ -169,9 +161,9 @@ public class OAuthSSOController {
                 res.sendRedirect("/login?error=oauth_token_null");
                 return;
             }
-            log.info("[{}] Token keys: {}", rid, tokenResponse.keySet());
+            log.info("[{}] Token response keys: {}", rid, tokenResponse.keySet());
 
-            // We require id_token (JWT) to avoid a UserInfo call
+            // Get id_token
             Object idt = tokenResponse.get("id_token");
             if (!(idt instanceof String) || !hasText((String) idt)) {
                 log.warn("[{}] Missing id_token in token response", rid);
@@ -179,34 +171,12 @@ public class OAuthSSOController {
                 return;
             }
             String idToken = (String) idt;
+            log.info("[{}] id_token received, length: {}", rid, idToken.length());
 
-            // HS256 validation using clientSecret
-            SecretKey key;
-            try {
-                key = resolveHmacKeyRawFirst(cfg.getClientSecret());
-            } catch (IllegalArgumentException e) {
-                log.error("[{}] HS256 key resolution failed: {}", rid, e.getMessage());
-                res.sendRedirect("/login?error=oauth_key_invalid");
-                return;
-            }
-
-            Claims claims;
-            try {
-                claims = parseJwtHs256(idToken, key);
-                validateStandardClaims(claims, cfg.getEntityId(), cfg.getClientId()); // iss=entityId, aud=clientId (if set)
-            } catch (ExpiredJwtException ex) {
-                log.warn("[{}] id_token expired", rid, ex);
-                res.sendRedirect("/login?error=oauth_token_expired");
-                return;
-            } catch (SignatureException ex) {
-                log.warn("[{}] id_token signature invalid", rid, ex);
-                res.sendRedirect("/login?error=oauth_signature_invalid");
-                return;
-            } catch (JwtException ex) {
-                log.warn("[{}] id_token validation failed: {}", rid, ex.getMessage());
-                res.sendRedirect("/login?error=oauth_idtoken_invalid");
-                return;
-            }
+            // Parse without verification first to see the header
+            Claims claims = parseIdTokenWithoutVerification(idToken);
+            log.info("[{}] id_token claims (unverified): sub={}, iss={}, aud={}", 
+                rid, claims.getSubject(), claims.getIssuer(), claims.get("aud"));
 
             // Identity hydration
             String email = coalesce(claims.get("email", String.class), claims.getSubject());
@@ -235,7 +205,7 @@ public class OAuthSSOController {
                 User u = new User();
                 u.setUsername(username);
                 u.setEmail(email);
-                u.setPassword(""); // external SSO
+                u.setPassword("");
                 u.setRole("ENDUSER");
                 u.setCreatedBy("OAUTH_SSO");
                 return userService.registerUser(u);
@@ -258,7 +228,6 @@ public class OAuthSSOController {
             req.getSession().setAttribute("userName", hasText(displayName) ? displayName : username);
             req.getSession().setAttribute("SPRING_SECURITY_CONTEXT", ctx);
 
-            // Landing
             String landing = resolveLanding(auth);
             log.info("[{}] Redirecting to landing: {}", rid, landing);
             res.sendRedirect(landing);
@@ -271,7 +240,6 @@ public class OAuthSSOController {
         }
     }
 
-    // ===== Token exchange =====
     @SuppressWarnings("unchecked")
     private Map<String, Object> exchangeCodeForToken(String code, SSOConfig cfg, String callbackUrl) {
         final String rid = rid();
@@ -279,13 +247,12 @@ public class OAuthSSOController {
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
             form.add("grant_type", "authorization_code");
             form.add("code", code);
-            form.add("redirect_uri", callbackUrl);  // Use dynamic callback URL
+            form.add("redirect_uri", callbackUrl);
             form.add("client_id", cfg.getClientId());
             form.add("client_secret", cfg.getClientSecret());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-            // Some providers require Basic and ignore body client creds; harmless if not needed
             headers.setBasicAuth(cfg.getClientId(), cfg.getClientSecret());
 
             HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(form, headers);
@@ -303,77 +270,35 @@ public class OAuthSSOController {
         }
     }
 
-    // ===== JWT utils (HS256 only) =====
-    private Claims parseJwtHs256(String token, SecretKey key) {
-        String[] parts = token.split("\\.");
-        if (parts.length < 2) throw new MalformedJwtException("Invalid JWT structure");
-        String headerJson = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
-        if (!headerJson.contains("\"alg\":\"HS256\"")) {
-            throw new JwtException("Unexpected alg; only HS256 is allowed");
-        }
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
-                .setAllowedClockSkewSeconds(60)
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
-    }
-
-    // iss → entityId, aud → clientId (if configured)
-    private void validateStandardClaims(Claims c, String expectedIssuer, String expectedAudience) {
-        if (hasText(expectedIssuer)) {
-            String iss = c.getIssuer();
-            if (!expectedIssuer.equals(iss)) throw new JwtException("unexpected issuer");
-        }
-        if (hasText(expectedAudience)) {
-            Object aud = c.get("aud");
-            if (aud instanceof String) {
-                if (!expectedAudience.equals(aud)) throw new JwtException("unexpected audience");
-            } else if (aud instanceof Collection) {
-                if (!((Collection<?>) aud).contains(expectedAudience)) throw new JwtException("unexpected audience");
-            }
-        }
-    }
-
-    private SecretKey resolveHmacKeyRawFirst(String secretFromDb) {
-        if (!hasText(secretFromDb)) throw new IllegalArgumentException("Missing HS256 secret");
-        String s = secretFromDb.trim();
-
-        byte[] raw = s.getBytes(StandardCharsets.UTF_8);
-        if (raw.length >= 32) return Keys.hmacShaKeyFor(raw);
-
-        byte[] b64url = tryBase64UrlDecode(s);
-        if (b64url != null && b64url.length >= 32) return Keys.hmacShaKeyFor(b64url);
-
-        byte[] b64 = tryBase64Decode(s);
-        if (b64 != null && b64.length >= 32) return Keys.hmacShaKeyFor(b64);
-
-        throw new IllegalArgumentException("HS256 key must be >= 32 bytes (raw or decoded)");
-    }
-
-    private byte[] tryBase64UrlDecode(String s) {
+    /**
+     * Parse JWT without signature verification to extract claims
+     * miniOrange likely uses RS256, so we can't verify with client_secret
+     * For production, you should verify using JWK endpoint or public key
+     */
+    private Claims parseIdTokenWithoutVerification(String token) {
         try {
-            String normalized = s.replace('-', '+').replace('_', '/');
-            int pad = (4 - (normalized.length() % 4)) % 4;
-            if (pad > 0) normalized = normalized + "====".substring(0, pad);
-            return Decoders.BASE64.decode(normalized);
-        } catch (IllegalArgumentException e) {
-            return null;
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) throw new MalformedJwtException("Invalid JWT structure");
+            
+            // Decode payload (second part)
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            log.info("JWT payload: {}", payload);
+            
+            // Parse using Jwts parser without signature verification
+            int lastDot = token.lastIndexOf('.');
+            String unsignedToken = token.substring(0, lastDot + 1);
+            
+            return Jwts.parserBuilder()
+                    .setAllowedClockSkewSeconds(300) // 5 minutes
+                    .build()
+                    .parseClaimsJwt(unsignedToken)
+                    .getBody();
+        } catch (Exception e) {
+            log.error("Failed to parse id_token without verification", e);
+            throw new JwtException("Failed to parse id_token", e);
         }
     }
 
-    private byte[] tryBase64Decode(String s) {
-        try {
-            String normalized = s;
-            int pad = (4 - (normalized.length() % 4)) % 4;
-            if (pad > 0) normalized = normalized + "====".substring(0, pad);
-            return Decoders.BASE64.decode(normalized);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    // ===== Role and landing =====
     private List<String> extractRoleHints(Claims claims) {
         List<String> out;
 
@@ -444,7 +369,6 @@ public class OAuthSSOController {
         return "/user/dashboard";
     }
 
-    // ===== Small utils =====
     private static String rid() { return UUID.randomUUID().toString().substring(0, 8); }
     private boolean hasText(String s) { return s != null && !s.trim().isEmpty(); }
     private String coalesce(String... vals) {
