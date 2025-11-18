@@ -40,23 +40,42 @@ public class JwtCallbackController {
     @GetMapping("/sso/jwt/login")
     public String initiateJWTLogin() {
         final String rid = rid();
+        log.info("[{}] === JWT Login Initiation START ===", rid);
+        
         Optional<SSOConfig> cfgOpt = ssoConfigService.getConfigByType("JWT");
         if (!cfgOpt.isPresent()) {
-            log.warn("[{}] JWT login aborted: config not found", rid);
+            log.error("[{}] JWT login aborted: config not found in database", rid);
             return "redirect:/login?error=jwt_not_configured";
         }
+        
         SSOConfig cfg = cfgOpt.get();
-        if (!Boolean.TRUE.equals(cfg.getIsEnabled())
-                || !"JWT".equalsIgnoreCase(nz(cfg.getSsoType()))
-                || !hasText(cfg.getIdpUrl())) {
-            log.warn("[{}] JWT login aborted: config invalid or disabled", rid);
+        log.info("[{}] JWT config retrieved from DB:", rid);
+        log.info("[{}]   - ID: {}", rid, cfg.getId());
+        log.info("[{}]   - SSO Type: {}", rid, cfg.getSsoType());
+        log.info("[{}]   - Enabled: {}", rid, cfg.getIsEnabled());
+        log.info("[{}]   - IDP URL: {}", rid, cfg.getIdpUrl());
+        log.info("[{}]   - Client ID: {}", rid, cfg.getClientId());
+        log.info("[{}]   - Entity ID: {}", rid, cfg.getEntityId());
+        log.info("[{}]   - Client Secret present: {}", rid, hasText(cfg.getClientSecret()));
+        
+        // Check if enabled
+        if (!Boolean.TRUE.equals(cfg.getIsEnabled())) {
+            log.error("[{}] JWT login aborted: config is disabled (isEnabled={})", rid, cfg.getIsEnabled());
+            return "redirect:/login?error=jwt_disabled";
+        }
+        
+        // Check if IDP URL is present
+        if (!hasText(cfg.getIdpUrl())) {
+            log.error("[{}] JWT login aborted: IDP URL is empty or null", rid);
             return "redirect:/login?error=jwt_not_configured";
         }
-        log.info("[{}] Redirecting to IdP: {}", rid, cfg.getIdpUrl());
+        
+        log.info("[{}] All validations passed. Redirecting to IdP: {}", rid, cfg.getIdpUrl());
+        log.info("[{}] === JWT Login Initiation END ===", rid);
         return "redirect:" + cfg.getIdpUrl();
     }
 
-    // Regex-tail mapping covers “…/sso/jwt/callback<token>” and “…/sso/jwt/callback/<token>”
+    // Regex-tail mapping covers "…/sso/jwt/callback<token>" and "…/sso/jwt/callback/<token>"
     @GetMapping("/api/jwt/callback**")
     public void jwtCallbackGet(HttpServletRequest req, HttpServletResponse res) throws Exception {
         handleCallback(req, res);
