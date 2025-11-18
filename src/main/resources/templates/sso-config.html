@@ -53,6 +53,42 @@
             margin: 0 auto;
         }
 
+        .debug-section {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .debug-section h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .btn-debug {
+            padding: 8px 16px;
+            background: #ffc107;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .debug-output {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
         .config-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -126,11 +162,27 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 2px solid #e0e0e0;
         }
 
         .checkbox-group input[type="checkbox"] {
-            width: auto;
+            width: 20px;
+            height: 20px;
             cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0 !important;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-group.checked {
+            background: #d4edda;
+            border-color: #28a745;
         }
 
         .btn-save {
@@ -170,6 +222,25 @@
             color: #721c24;
             border-left: 4px solid #dc3545;
         }
+
+        .config-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-enabled {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-disabled {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -179,30 +250,43 @@
 </div>
 
 <div class="container">
+    <!-- Debug Section -->
+    <div class="debug-section">
+        <h3>🔍 Diagnostic Tools</h3>
+        <p style="color: #856404; margin-bottom: 10px;">
+            Use this to check what's actually saved in the database
+        </p>
+        <button class="btn-debug" onclick="checkDebug()">Check Current Configuration</button>
+        <div id="debug-output" class="debug-output"></div>
+    </div>
+
     <div class="config-grid">
         <!-- JWT Configuration -->
         <div class="config-card">
             <div class="card-header jwt">
                 🔑 JWT SSO Configuration
+                <span id="jwt-status" class="config-status status-disabled">Disabled</span>
             </div>
             <div class="card-body">
                 <div id="jwt-alert"></div>
                 <form id="jwtForm">
                     <div class="form-group">
-                        <label>IDP URL</label>
+                        <label>IDP URL *</label>
                         <input type="url" id="jwt-idp-url" placeholder="https://your-idp.com/jwt/auth" required>
                     </div>
                     <div class="form-group">
-                        <label>Client ID</label>
+                        <label>Client ID *</label>
                         <input type="text" id="jwt-client-id" placeholder="your-client-id" required>
                     </div>
                     <div class="form-group">
-                        <label>Client Secret</label>
-                        <input type="password" id="jwt-client-secret" placeholder="your-client-secret" required>
+                        <label>Client Secret * (min 32 characters for HS256)</label>
+                        <input type="password" id="jwt-client-secret" placeholder="your-client-secret-min-32-chars" required>
                     </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="jwt-enabled">
-                        <label for="jwt-enabled" style="margin: 0;">Enable JWT SSO</label>
+                    <div class="form-group">
+                        <div class="checkbox-group" id="jwt-checkbox-group">
+                            <input type="checkbox" id="jwt-enabled">
+                            <label for="jwt-enabled">Enable JWT SSO</label>
+                        </div>
                     </div>
                     <button type="submit" class="btn-save">Save JWT Configuration</button>
                 </form>
@@ -213,6 +297,7 @@
         <div class="config-card">
             <div class="card-header saml">
                 🛡️ SAML SSO Configuration
+                <span id="saml-status" class="config-status status-disabled">Disabled</span>
             </div>
             <div class="card-body">
                 <div id="saml-alert"></div>
@@ -231,9 +316,11 @@
 MIICXAIBAAKBgQC...
 -----END CERTIFICATE-----" required></textarea>
                     </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="saml-enabled">
-                        <label for="saml-enabled" style="margin: 0;">Enable SAML SSO</label>
+                    <div class="form-group">
+                        <div class="checkbox-group" id="saml-checkbox-group">
+                            <input type="checkbox" id="saml-enabled">
+                            <label for="saml-enabled">Enable SAML SSO</label>
+                        </div>
                     </div>
                     <button type="submit" class="btn-save">Save SAML Configuration</button>
                 </form>
@@ -244,6 +331,7 @@ MIICXAIBAAKBgQC...
         <div class="config-card">
             <div class="card-header oauth">
                 🌐 OAuth 2.0 Configuration
+                <span id="oauth-status" class="config-status status-disabled">Disabled</span>
             </div>
             <div class="card-body">
                 <div id="oauth-alert"></div>
@@ -264,9 +352,11 @@ MIICXAIBAAKBgQC...
                         <label>Client Secret</label>
                         <input type="password" id="oauth-client-secret" placeholder="your-client-secret" required>
                     </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="oauth-enabled">
-                        <label for="oauth-enabled" style="margin: 0;">Enable OAuth SSO</label>
+                    <div class="form-group">
+                        <div class="checkbox-group" id="oauth-checkbox-group">
+                            <input type="checkbox" id="oauth-enabled">
+                            <label for="oauth-enabled">Enable OAuth SSO</label>
+                        </div>
                     </div>
                     <button type="submit" class="btn-save">Save OAuth Configuration</button>
                 </form>
@@ -276,24 +366,131 @@ MIICXAIBAAKBgQC...
 </div>
 
 <script>
+    // Update checkbox group styling when checked/unchecked
+    function setupCheckboxStyling(checkboxId, groupId) {
+        const checkbox = document.getElementById(checkboxId);
+        const group = document.getElementById(groupId);
+        
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                group.classList.add('checked');
+            } else {
+                group.classList.remove('checked');
+            }
+        });
+    }
+
+    setupCheckboxStyling('jwt-enabled', 'jwt-checkbox-group');
+    setupCheckboxStyling('saml-enabled', 'saml-checkbox-group');
+    setupCheckboxStyling('oauth-enabled', 'oauth-checkbox-group');
+
     function showAlert(type, message, elementId) {
         const alertDiv = document.getElementById(elementId);
         alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
         setTimeout(() => {
             alertDiv.innerHTML = '';
-        }, 3000);
+        }, 5000);
     }
 
+    function updateStatus(type, enabled) {
+        const statusEl = document.getElementById(`${type}-status`);
+        if (enabled) {
+            statusEl.textContent = 'Enabled';
+            statusEl.className = 'config-status status-enabled';
+        } else {
+            statusEl.textContent = 'Disabled';
+            statusEl.className = 'config-status status-disabled';
+        }
+    }
+
+    // Debug function
+    async function checkDebug() {
+        const outputEl = document.getElementById('debug-output');
+        outputEl.style.display = 'block';
+        outputEl.innerHTML = 'Loading...';
+        
+        try {
+            const response = await fetch('/sso/config/debug');
+            const data = await response.json();
+            outputEl.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        } catch (error) {
+            outputEl.innerHTML = '<span style="color: red">Error: ' + error.message + '</span>';
+        }
+    }
+
+    // Load configurations on page load
+    async function loadConfigurations() {
+        // Load JWT
+        try {
+            const jwtResp = await fetch('/sso/jwt/config');
+            const jwtData = await jwtResp.json();
+            if (jwtData.idpUrl) {
+                document.getElementById('jwt-idp-url').value = jwtData.idpUrl;
+                document.getElementById('jwt-client-id').value = jwtData.clientId;
+                document.getElementById('jwt-client-secret').value = jwtData.clientSecret;
+                document.getElementById('jwt-enabled').checked = jwtData.enabled;
+                updateStatus('jwt', jwtData.enabled);
+                if (jwtData.enabled) {
+                    document.getElementById('jwt-checkbox-group').classList.add('checked');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load JWT config', e);
+        }
+
+        // Load SAML
+        try {
+            const samlResp = await fetch('/sso/saml/config');
+            const samlData = await samlResp.json();
+            if (samlData.entityId) {
+                document.getElementById('saml-entity-id').value = samlData.entityId;
+                document.getElementById('saml-sso-url').value = samlData.ssoUrl;
+                document.getElementById('saml-certificate').value = samlData.certificate;
+                document.getElementById('saml-enabled').checked = samlData.enabled;
+                updateStatus('saml', samlData.enabled);
+                if (samlData.enabled) {
+                    document.getElementById('saml-checkbox-group').classList.add('checked');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load SAML config', e);
+        }
+
+        // Load OAuth
+        try {
+            const oauthResp = await fetch('/sso/oauth/config');
+            const oauthData = await oauthResp.json();
+            if (oauthData.idpUrl) {
+                document.getElementById('oauth-idp-url').value = oauthData.idpUrl;
+                document.getElementById('oauth-sso-url').value = oauthData.ssoUrl;
+                document.getElementById('oauth-client-id').value = oauthData.clientId;
+                document.getElementById('oauth-client-secret').value = oauthData.clientSecret;
+                document.getElementById('oauth-enabled').checked = oauthData.enabled;
+                updateStatus('oauth', oauthData.enabled);
+                if (oauthData.enabled) {
+                    document.getElementById('oauth-checkbox-group').classList.add('checked');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load OAuth config', e);
+        }
+    }
+
+    // JWT Form Submit
     document.getElementById('jwtForm').addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        const enabled = document.getElementById('jwt-enabled').checked;
+        console.log('JWT Form Submit - Enabled checkbox:', enabled);
+
         const config = {
-            ssoType: 'JWT',
             idpUrl: document.getElementById('jwt-idp-url').value,
             clientId: document.getElementById('jwt-client-id').value,
             clientSecret: document.getElementById('jwt-client-secret').value,
-            isEnabled: document.getElementById('jwt-enabled').checked
+            enabled: enabled  // This must be a boolean
         };
+
+        console.log('Sending JWT config:', config);
 
         try {
             const response = await fetch('/sso/jwt/config', {
@@ -302,27 +499,35 @@ MIICXAIBAAKBgQC...
                 body: JSON.stringify(config)
             });
 
-            const result = await response.text();
+            const result = await response.json();
+            console.log('JWT save response:', result);
 
-            if (result === 'success') {
-                showAlert('success', 'JWT configuration saved successfully!', 'jwt-alert');
+            if (result.success) {
+                showAlert('success', 'JWT configuration saved successfully! Status: ' + (enabled ? 'ENABLED' : 'DISABLED'), 'jwt-alert');
+                updateStatus('jwt', enabled);
+                
+                // Verify with debug
+                setTimeout(checkDebug, 500);
             } else {
-                showAlert('error', result, 'jwt-alert');
+                showAlert('error', result.message || 'Failed to save', 'jwt-alert');
             }
         } catch (error) {
+            console.error('JWT save error:', error);
             showAlert('error', 'Error saving configuration: ' + error, 'jwt-alert');
         }
     });
 
+    // SAML Form Submit
     document.getElementById('samlForm').addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        const enabled = document.getElementById('saml-enabled').checked;
+
         const config = {
-            ssoType: 'SAML',
             entityId: document.getElementById('saml-entity-id').value,
             ssoUrl: document.getElementById('saml-sso-url').value,
             certificate: document.getElementById('saml-certificate').value,
-            isEnabled: document.getElementById('saml-enabled').checked
+            enabled: enabled
         };
 
         try {
@@ -332,28 +537,31 @@ MIICXAIBAAKBgQC...
                 body: JSON.stringify(config)
             });
 
-            const result = await response.text();
+            const result = await response.json();
 
-            if (result === 'success') {
+            if (result.success) {
                 showAlert('success', 'SAML configuration saved successfully!', 'saml-alert');
+                updateStatus('saml', enabled);
             } else {
-                showAlert('error', result, 'saml-alert');
+                showAlert('error', result.message || 'Failed to save', 'saml-alert');
             }
         } catch (error) {
             showAlert('error', 'Error saving configuration: ' + error, 'saml-alert');
         }
     });
 
+    // OAuth Form Submit
     document.getElementById('oauthForm').addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        const enabled = document.getElementById('oauth-enabled').checked;
+
         const config = {
-            ssoType: 'OAUTH',
             idpUrl: document.getElementById('oauth-idp-url').value,
             ssoUrl: document.getElementById('oauth-sso-url').value,
             clientId: document.getElementById('oauth-client-id').value,
             clientSecret: document.getElementById('oauth-client-secret').value,
-            isEnabled: document.getElementById('oauth-enabled').checked
+            enabled: enabled
         };
 
         try {
@@ -363,17 +571,21 @@ MIICXAIBAAKBgQC...
                 body: JSON.stringify(config)
             });
 
-            const result = await response.text();
+            const result = await response.json();
 
-            if (result === 'success') {
+            if (result.success) {
                 showAlert('success', 'OAuth configuration saved successfully!', 'oauth-alert');
+                updateStatus('oauth', enabled);
             } else {
-                showAlert('error', result, 'oauth-alert');
+                showAlert('error', result.message || 'Failed to save', 'oauth-alert');
             }
         } catch (error) {
             showAlert('error', 'Error saving configuration: ' + error, 'oauth-alert');
         }
     });
+
+    // Load configurations on page load
+    window.addEventListener('DOMContentLoaded', loadConfigurations);
 </script>
 </body>
 </html>
