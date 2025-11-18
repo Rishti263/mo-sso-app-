@@ -21,11 +21,76 @@ public class SSOConfigController {
 
     private final SSOConfigService ssoConfigService;
 
+    // ====== DIAGNOSTIC ENDPOINT ======
+    @GetMapping("/config/debug")
+    public ResponseEntity<?> debugAllConfigs() {
+        log.info("=== DEBUG: Fetching all SSO configs ===");
+        
+        Map<String, Object> debug = new HashMap<>();
+        
+        // JWT Config
+        Optional<SSOConfig> jwtOpt = ssoConfigService.getConfigByType("JWT");
+        if (jwtOpt.isPresent()) {
+            SSOConfig jwt = jwtOpt.get();
+            Map<String, Object> jwtDebug = new HashMap<>();
+            jwtDebug.put("id", jwt.getId());
+            jwtDebug.put("ssoType", jwt.getSsoType());
+            jwtDebug.put("isEnabled", jwt.getIsEnabled());
+            jwtDebug.put("idpUrl", jwt.getIdpUrl());
+            jwtDebug.put("clientId", jwt.getClientId());
+            jwtDebug.put("entityId", jwt.getEntityId());
+            jwtDebug.put("hasClientSecret", jwt.getClientSecret() != null && !jwt.getClientSecret().isEmpty());
+            debug.put("JWT", jwtDebug);
+        } else {
+            debug.put("JWT", "NOT_FOUND");
+        }
+        
+        // OAuth Config
+        Optional<SSOConfig> oauthOpt = ssoConfigService.getConfigByType("OAUTH");
+        if (oauthOpt.isPresent()) {
+            SSOConfig oauth = oauthOpt.get();
+            Map<String, Object> oauthDebug = new HashMap<>();
+            oauthDebug.put("id", oauth.getId());
+            oauthDebug.put("ssoType", oauth.getSsoType());
+            oauthDebug.put("isEnabled", oauth.getIsEnabled());
+            oauthDebug.put("idpUrl", oauth.getIdpUrl());
+            oauthDebug.put("ssoUrl", oauth.getSsoUrl());
+            oauthDebug.put("clientId", oauth.getClientId());
+            oauthDebug.put("hasClientSecret", oauth.getClientSecret() != null && !oauth.getClientSecret().isEmpty());
+            debug.put("OAUTH", oauthDebug);
+        } else {
+            debug.put("OAUTH", "NOT_FOUND");
+        }
+        
+        // SAML Config
+        Optional<SSOConfig> samlOpt = ssoConfigService.getConfigByType("SAML");
+        if (samlOpt.isPresent()) {
+            SSOConfig saml = samlOpt.get();
+            Map<String, Object> samlDebug = new HashMap<>();
+            samlDebug.put("id", saml.getId());
+            samlDebug.put("ssoType", saml.getSsoType());
+            samlDebug.put("isEnabled", saml.getIsEnabled());
+            samlDebug.put("entityId", saml.getEntityId());
+            samlDebug.put("ssoUrl", saml.getSsoUrl());
+            samlDebug.put("hasCertificate", saml.getCertificate() != null && !saml.getCertificate().isEmpty());
+            debug.put("SAML", samlDebug);
+        } else {
+            debug.put("SAML", "NOT_FOUND");
+        }
+        
+        log.info("=== DEBUG OUTPUT: {} ===", debug);
+        return ResponseEntity.ok(debug);
+    }
+
     // ====== JWT Configuration ======
     @PostMapping("/jwt/config")
     public ResponseEntity<Map<String, Object>> saveJwtConfig(@RequestBody JwtConfigRequest request) {
-        log.info("Received JWT config save request: idpUrl={}, clientId={}, enabled={}", 
-                 request.getIdpUrl(), request.getClientId(), request.isEnabled());
+        log.info("=== JWT Config Save Request ===");
+        log.info("idpUrl: {}", request.getIdpUrl());
+        log.info("clientId: {}", request.getClientId());
+        log.info("clientSecret (masked): {}...", request.getClientSecret() != null && request.getClientSecret().length() > 4 
+                 ? request.getClientSecret().substring(0, 4) : "null");
+        log.info("enabled: {}", request.isEnabled());
         
         Map<String, Object> response = new HashMap<>();
         
@@ -47,7 +112,7 @@ public class SSOConfigController {
             config.setIdpUrl(request.getIdpUrl());
             config.setClientId(request.getClientId());
             
-            // Only update secret if it's not masked (dots)
+            // Only update secret if it's not masked (dots or bullets)
             if (request.getClientSecret() != null && 
                 !request.getClientSecret().matches("•+") &&
                 !request.getClientSecret().matches("\\.+")) {
@@ -64,11 +129,26 @@ public class SSOConfigController {
             
             // Save
             SSOConfig saved = ssoConfigService.saveOrUpdateConfig(config);
-            log.info("JWT config saved successfully with id={}", saved.getId());
+            log.info("=== JWT config saved successfully ===");
+            log.info("Saved config details:");
+            log.info("  - id: {}", saved.getId());
+            log.info("  - ssoType: {}", saved.getSsoType());
+            log.info("  - isEnabled: {}", saved.getIsEnabled());
+            log.info("  - idpUrl: {}", saved.getIdpUrl());
+            log.info("  - clientId: {}", saved.getClientId());
+            log.info("  - entityId: {}", saved.getEntityId());
+            log.info("  - has clientSecret: {}", saved.getClientSecret() != null && !saved.getClientSecret().isEmpty());
             
             response.put("success", true);
             response.put("message", "JWT configuration saved successfully");
             response.put("id", saved.getId());
+            response.put("config", Map.of(
+                "id", saved.getId(),
+                "ssoType", saved.getSsoType(),
+                "isEnabled", saved.getIsEnabled(),
+                "idpUrl", saved.getIdpUrl(),
+                "clientId", saved.getClientId()
+            ));
             
             return ResponseEntity.ok(response);
             
@@ -89,7 +169,8 @@ public class SSOConfigController {
             
             if (configOpt.isPresent()) {
                 SSOConfig config = configOpt.get();
-                log.info("Found JWT config with id={}", config.getId());
+                log.info("Found JWT config with id={}, enabled={}, idpUrl={}", 
+                         config.getId(), config.getIsEnabled(), config.getIdpUrl());
                 
                 JwtConfigRequest response = new JwtConfigRequest();
                 response.setIdpUrl(config.getIdpUrl());
@@ -209,6 +290,9 @@ public class SSOConfigController {
             config.setIdpUrl(request.getIdpUrl());
             config.setSsoUrl(request.getSsoUrl());
             config.setClientId(request.getClientId());
+            
+            // Set entityId same as clientId for validation (optional)
+            config.setEntityId(request.getClientId());
             
             // Only update secret if not masked
             if (request.getClientSecret() != null && 
